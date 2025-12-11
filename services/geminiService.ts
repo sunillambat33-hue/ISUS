@@ -1,8 +1,20 @@
 import { GoogleGenAI } from "@google/genai";
 
-// Safe access to process.env to prevent "process is not defined" error in browser environments
-const apiKey = (typeof process !== 'undefined' && process.env) ? process.env.API_KEY : '';
-const ai = new GoogleGenAI({ apiKey: apiKey || '' });
+// Robustly retrieve API Key to prevent "process is not defined" errors in browser
+const getApiKey = () => {
+  try {
+    // Check if process and process.env exist before accessing
+    if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
+      return process.env.API_KEY;
+    }
+  } catch (error) {
+    // Ignore reference errors
+  }
+  return '';
+};
+
+const apiKey = getApiKey();
+const ai = new GoogleGenAI({ apiKey: apiKey || 'DUMMY_KEY_FOR_INIT' });
 
 export const explainQuestion = async (questionText: string, options: string[], correctAnswer: string): Promise<string> => {
   if (!apiKey) return "API Key not configured. Unable to fetch AI explanation.";
