@@ -7,8 +7,9 @@ if (!rootElement) {
   throw new Error("Could not find root element to mount to");
 }
 
+// Correctly typed ErrorBoundary component
 interface ErrorBoundaryProps {
-  children: React.ReactNode;
+  children?: React.ReactNode;
 }
 
 interface ErrorBoundaryState {
@@ -17,10 +18,10 @@ interface ErrorBoundaryState {
 }
 
 class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  constructor(props: ErrorBoundaryProps) {
-    super(props);
-    this.state = { hasError: false, error: null };
-  }
+  public state: ErrorBoundaryState = {
+    hasError: false,
+    error: null
+  };
 
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
     return { hasError: true, error };
@@ -38,15 +39,15 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
           <p style={{ color: '#4b5563' }}>Please refresh the page or try again later.</p>
           <div style={{ marginTop: '20px', padding: '10px', background: '#f3f4f6', borderRadius: '5px', textAlign: 'left', overflow: 'auto' }}>
             <p style={{ fontWeight: 'bold', fontSize: '12px' }}>Error Details:</p>
-            <pre style={{ color: '#dc2626', fontSize: '11px' }}>
-              {this.state.error?.toString()}
+            <pre style={{ color: '#dc2626', fontSize: '11px', whiteSpace: 'pre-wrap' }}>
+              {this.state.error?.message || this.state.error?.toString()}
             </pre>
           </div>
         </div>
       );
     }
 
-    return this.props.children;
+    return (this as any).props.children;
   }
 }
 

@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { CLASSES, SPECIAL_CLASSES, BOARDS, EXAMS, MOCK_QUESTIONS, RESOURCES, SYLLABUS_DATA } from './constants';
-import { Question, ExamResult, PageState, Reminder } from './types';
+import { Question, ExamResult, PageState, Reminder, QuizHistoryItem } from './types';
 import { explainQuestion, generateQuizQuestion, generateStudyNotes, generateChapterSummary, generatePracticeSet } from './services/geminiService';
 import BottomNav from './components/BottomNav';
 import { 
@@ -30,6 +30,7 @@ import {
   LogOut,
   Zap,
   Clock,
+  History,
   AlarmClock,
   Eye,
   LayoutGrid, 
@@ -91,7 +92,7 @@ const RateUsModal = ({ onClose }: { onClose: () => void }) => {
                         <div className="w-14 h-14 bg-yellow-100 rounded-full flex items-center justify-center text-yellow-500 mx-auto mb-4">
                              <Star size={28} fill="currentColor" />
                          </div>
-                         <h3 className="text-xl font-bold text-gray-800 mb-2">Rate SelfStudys</h3>
+                         <h3 className="text-xl font-bold text-gray-800 mb-2">Rate SterbenStudys</h3>
                          <p className="text-gray-500 text-sm mb-6 leading-relaxed">If you enjoy using the app, please take a moment to rate us.</p>
                          
                          <div className="flex justify-center gap-3 mb-8">
@@ -188,7 +189,7 @@ const Sidebar = ({
                     <h2 className="font-bold text-lg leading-tight truncate max-w-[150px]">{userProfile.name}</h2>
                     <div className="flex items-center gap-1.5 text-blue-100">
                         <GraduationCap size={18} />
-                        <p className="font-bold text-lg">Self<span className="text-white">Studys</span></p>
+                        <p className="font-bold text-lg">SterbenStudys</p>
                     </div>
                 </div>
             </div>
@@ -283,7 +284,7 @@ const Onboarding = ({ initialPrefs, onSave }: { initialPrefs?: UserPrefs, onSave
         <div className="bg-white p-4 flex justify-between items-center shadow-sm sticky top-0 z-10">
             <div className="flex items-center gap-2 text-teal-500">
                 <GraduationCap size={24} />
-                <span className="text-xl font-bold">SelfStudys</span>
+                <span className="text-xl font-bold">SterbenStudys</span>
             </div>
             <button className="p-1 rounded-full hover:bg-gray-100" onClick={handleSave}>
                 <X size={24} className="text-gray-600" />
@@ -486,7 +487,7 @@ const Home = ({
                 </button>
                 <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
                     <GraduationCap size={26} />
-                    SelfStudys
+                    SterbenStudys
                 </h1>
                 <Share2 size={24} />
             </div>
@@ -580,7 +581,7 @@ const Home = ({
 };
 
 // 3. Test Interface Component
-const TestInterface = ({ onFinish }: { onFinish: (result: ExamResult) => void }) => {
+const TestInterface = ({ onFinish }: { onFinish: (result: ExamResult, subject: string, topic: string) => void }) => {
     // ... [Existing implementation] ...
     // Placeholder to keep the file valid, using standard implementation
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
@@ -652,7 +653,7 @@ const TestInterface = ({ onFinish }: { onFinish: (result: ExamResult) => void })
             skipped,
             timeTaken: formatTime(600 - timer),
             questionAnalysis: analysis
-        });
+        }, "Physics", "Alternating Current");
     };
     
     const handleGenerateMore = async () => {
@@ -780,17 +781,49 @@ const TestInterface = ({ onFinish }: { onFinish: (result: ExamResult) => void })
 };
 
 // 4. Practice Quiz Generator Component (NEW)
-const PracticeQuizGenerator = ({ selectedClass, onBack }: { selectedClass: string, onBack: () => void }) => {
+const PracticeQuizGenerator = ({ selectedClass, onBack, onFinish }: { 
+    selectedClass: string, 
+    onBack: () => void,
+    onFinish: (score: { correct: number, wrong: number }, subject: string, topic: string, timeTaken: string) => void
+}) => {
     const syllabus = SYLLABUS_DATA[selectedClass] || SYLLABUS_DATA['12'];
     const [selectedSubject, setSelectedSubject] = useState(syllabus[0]?.subject || '');
     const [topic, setTopic] = useState('');
     const [isGenerating, setIsGenerating] = useState(false);
     const [quizQuestions, setQuizQuestions] = useState<any[]>([]);
     
+    // Quiz Configuration State
+    const [timeLimit, setTimeLimit] = useState<number>(0); // 0 means no limit
+    
     // Quiz State
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
     const [selectedOption, setSelectedOption] = useState<number | null>(null);
     const [showExplanation, setShowExplanation] = useState(false);
+    const [timeLeft, setTimeLeft] = useState<number>(0);
+    const [isQuizFinished, setIsQuizFinished] = useState(false);
+    const [score, setScore] = useState({ correct: 0, wrong: 0 });
+
+    useEffect(() => {
+        let interval: any;
+        if (quizQuestions.length > 0 && !isQuizFinished && timeLimit > 0 && timeLeft > 0) {
+            interval = setInterval(() => {
+                setTimeLeft((prev) => {
+                    if (prev <= 1) {
+                        setIsQuizFinished(true);
+                        return 0;
+                    }
+                    return prev - 1;
+                });
+            }, 1000);
+        }
+        return () => clearInterval(interval);
+    }, [quizQuestions, isQuizFinished, timeLimit, timeLeft]);
+
+    const formatTime = (seconds: number) => {
+        const m = Math.floor(seconds / 60);
+        const s = seconds % 60;
+        return `${m}:${s.toString().padStart(2, '0')}`;
+    };
 
     const handleGenerate = async () => {
         if (!topic.trim()) return;
@@ -799,6 +832,9 @@ const PracticeQuizGenerator = ({ selectedClass, onBack }: { selectedClass: strin
         setCurrentQuestionIndex(0);
         setSelectedOption(null);
         setShowExplanation(false);
+        setIsQuizFinished(false);
+        setScore({ correct: 0, wrong: 0 });
+        setTimeLeft(timeLimit);
 
         const questions = await generatePracticeSet(selectedClass, selectedSubject, topic);
         if (questions && questions.length > 0) {
@@ -813,6 +849,15 @@ const PracticeQuizGenerator = ({ selectedClass, onBack }: { selectedClass: strin
     };
 
     const handleSubmitAnswer = () => {
+        if (selectedOption === null) return;
+        
+        const isCorrect = quizQuestions[currentQuestionIndex].correctAnswer === selectedOption;
+        if (isCorrect) {
+            setScore(prev => ({ ...prev, correct: prev.correct + 1 }));
+        } else {
+            setScore(prev => ({ ...prev, wrong: prev.wrong + 1 }));
+        }
+        
         setShowExplanation(true);
     };
 
@@ -821,8 +866,17 @@ const PracticeQuizGenerator = ({ selectedClass, onBack }: { selectedClass: strin
             setCurrentQuestionIndex(prev => prev + 1);
             setSelectedOption(null);
             setShowExplanation(false);
+        } else {
+            setIsQuizFinished(true);
         }
     };
+
+    useEffect(() => {
+        if (isQuizFinished && quizQuestions.length > 0) {
+            const timeTakenStr = timeLimit > 0 ? formatTime(timeLimit - timeLeft) : 'N/A';
+            onFinish(score, selectedSubject, topic, timeTakenStr);
+        }
+    }, [isQuizFinished]);
 
     return (
         <div className="bg-white min-h-screen max-w-md mx-auto relative flex flex-col">
@@ -868,6 +922,28 @@ const PracticeQuizGenerator = ({ selectedClass, onBack }: { selectedClass: strin
                                 />
                             </div>
 
+                            <div>
+                                <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Time Limit</label>
+                                <div className="grid grid-cols-3 gap-2">
+                                    {[
+                                        { label: 'No Limit', value: 0 },
+                                        { label: '5 Min', value: 300 },
+                                        { label: '10 Min', value: 600 }
+                                    ].map((t) => (
+                                        <button
+                                            key={t.value}
+                                            onClick={() => setTimeLimit(t.value)}
+                                            className={`py-2 rounded-lg text-xs font-bold border transition-all
+                                                ${timeLimit === t.value 
+                                                    ? 'bg-purple-600 text-white border-purple-600 shadow-sm' 
+                                                    : 'bg-white text-gray-600 border-gray-200 hover:border-purple-200'}`}
+                                        >
+                                            {t.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
                             <button 
                                 onClick={handleGenerate}
                                 disabled={isGenerating || !topic}
@@ -881,11 +957,53 @@ const PracticeQuizGenerator = ({ selectedClass, onBack }: { selectedClass: strin
                             </button>
                         </div>
                     </div>
+                ) : isQuizFinished ? (
+                    // Results Screen
+                    <div className="p-6 flex flex-col items-center justify-center min-h-[60vh] text-center">
+                        <div className="w-24 h-24 bg-yellow-100 rounded-full flex items-center justify-center text-yellow-500 mb-6 shadow-inner">
+                            <Trophy size={48} />
+                        </div>
+                        <h2 className="text-2xl font-bold text-gray-800 mb-2">Quiz Completed!</h2>
+                        <p className="text-gray-500 mb-8">Great job completing the AI-generated practice set.</p>
+                        
+                        <div className="grid grid-cols-2 gap-4 w-full mb-8">
+                            <div className="bg-green-50 p-4 rounded-2xl border border-green-100">
+                                <p className="text-green-600 text-xs font-bold uppercase tracking-wider mb-1">Correct</p>
+                                <p className="text-2xl font-bold text-green-700">{score.correct}</p>
+                            </div>
+                            <div className="bg-red-50 p-4 rounded-2xl border border-red-100">
+                                <p className="text-red-600 text-xs font-bold uppercase tracking-wider mb-1">Incorrect</p>
+                                <p className="text-2xl font-bold text-red-700">{score.wrong}</p>
+                            </div>
+                        </div>
+
+                        <div className="w-full space-y-3">
+                            <button 
+                                onClick={handleGenerate}
+                                className="w-full py-4 bg-purple-600 text-white rounded-xl font-bold shadow-lg shadow-purple-200 hover:bg-purple-700 transition-all"
+                            >
+                                Retake Quiz
+                            </button>
+                            <button 
+                                onClick={() => setQuizQuestions([])}
+                                className="w-full py-4 bg-white text-gray-700 border border-gray-200 rounded-xl font-bold hover:bg-gray-50 transition-all"
+                            >
+                                New Topic
+                            </button>
+                        </div>
+                    </div>
                 ) : (
                     // Quiz Interface
                     <div className="p-5 pb-24">
                         <div className="flex justify-between items-center mb-6">
-                            <span className="font-bold text-gray-400 text-sm">Question {currentQuestionIndex + 1} of {quizQuestions.length}</span>
+                            <div className="flex flex-col">
+                                <span className="font-bold text-gray-400 text-xs uppercase tracking-wider">Question {currentQuestionIndex + 1} of {quizQuestions.length}</span>
+                                {timeLimit > 0 && (
+                                    <span className={`text-sm font-bold flex items-center gap-1 mt-1 ${timeLeft < 60 ? 'text-red-500 animate-pulse' : 'text-gray-700'}`}>
+                                        <Clock size={14} /> {formatTime(timeLeft)}
+                                    </span>
+                                )}
+                            </div>
                             <span className="px-3 py-1 bg-purple-100 text-purple-700 text-xs font-bold rounded-full">AI Generated</span>
                         </div>
 
@@ -1222,9 +1340,19 @@ const SyllabusViewer = ({ selectedClass, onBack, onOpenNotes }: { selectedClass:
                                         <h3 className="text-indigo-900 font-bold mb-2 flex items-center gap-2">
                                             <BookOpen size={18} /> Chapter Overview
                                         </h3>
-                                        <p className="text-indigo-800 text-sm leading-relaxed">
+                                        <p className="text-indigo-800 text-sm leading-relaxed mb-4">
                                             {summaryData.summary}
                                         </p>
+                                        <button 
+                                            onClick={() => {
+                                                setSummaryModal(null);
+                                                onOpenNotes(summaryModal.subject, summaryModal.chapter);
+                                            }}
+                                            className="w-full bg-white text-indigo-600 border border-indigo-200 py-2.5 rounded-lg text-sm font-bold flex items-center justify-center gap-2 hover:bg-indigo-50 transition-colors shadow-sm"
+                                        >
+                                            <Sparkles size={16} className="text-purple-500" /> 
+                                            Generate Notes for this Chapter
+                                        </button>
                                     </div>
 
                                     {/* Concepts Section */}
@@ -1485,12 +1613,14 @@ const ProfilePage = ({
     userPrefs, 
     userProfile,
     onEditPrefs,
-    onUpdateProfile
+    onUpdateProfile,
+    onOpenHistory
 }: { 
     userPrefs: UserPrefs, 
     userProfile: UserProfileData,
     onEditPrefs: () => void,
-    onUpdateProfile: (data: UserProfileData) => void
+    onUpdateProfile: (data: UserProfileData) => void,
+    onOpenHistory: () => void
 }) => {
     const [isEditing, setIsEditing] = useState(false);
     const [tempName, setTempName] = useState(userProfile.name);
@@ -1595,10 +1725,10 @@ const ProfilePage = ({
                  </div>
 
                  <div className="grid grid-cols-2 gap-3">
-                     <div className="bg-orange-50 p-4 rounded-xl border border-orange-100">
-                         <div className="bg-orange-100 w-8 h-8 rounded-lg flex items-center justify-center text-orange-600 mb-2"><Trophy size={18}/></div>
-                         <h4 className="font-bold text-gray-800">12</h4>
-                         <p className="text-xs text-gray-500">Tests Attempted</p>
+                     <div id="history-button" onClick={onOpenHistory} className="bg-orange-50 p-4 rounded-xl border border-orange-100 text-left cursor-pointer">
+                         <div className="bg-orange-100 w-8 h-8 rounded-lg flex items-center justify-center text-orange-600 mb-2"><History size={18}/></div>
+                         <h4 className="font-bold text-gray-800">History</h4>
+                         <p className="text-xs text-gray-500">Quiz Records</p>
                      </div>
                      <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100">
                          <div className="bg-emerald-100 w-8 h-8 rounded-lg flex items-center justify-center text-emerald-600 mb-2"><Calendar size={18}/></div>
@@ -1871,11 +2001,82 @@ const BookmarksPage = ({ category, onBack }: { category: BookmarkCategory, onBac
     );
 };
 
+// 15. Quiz History Page Component
+const QuizHistoryPage = ({ history, onBack }: { history: QuizHistoryItem[], onBack: () => void }) => {
+    return (
+        <div id="quiz-history-page" className="bg-white min-h-screen flex flex-col max-w-md mx-auto relative pb-20">
+             <div id="quiz-history-header" className="bg-white p-4 border-b flex items-center gap-3 sticky top-0 z-10 shadow-sm">
+                <button id="quiz-history-back" onClick={onBack}><ChevronLeft className="text-gray-700" size={24} /></button>
+                <h1 className="text-lg font-bold text-gray-800">Quiz History</h1>
+            </div>
+
+            <div id="quiz-history-list" className="p-4 space-y-4">
+                {history.length === 0 ? (
+                    <div id="no-history-view" className="flex flex-col items-center justify-center py-20 text-gray-400">
+                        <div className="bg-gray-100 p-4 rounded-full mb-3">
+                            <History size={32} />
+                        </div>
+                        <p>No quiz history found.</p>
+                    </div>
+                ) : (
+                    history.map(item => (
+                        <div key={item.id} id={`history-item-${item.id}`} className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm">
+                            <div className="flex justify-between items-start mb-2">
+                                <div>
+                                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${item.type === 'AI_QUIZ' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'}`}>
+                                        {item.type.replace('_', ' ')}
+                                    </span>
+                                    <h3 className="font-bold text-gray-800 mt-1">{item.topic}</h3>
+                                    <p className="text-xs text-gray-500">{item.subject}</p>
+                                </div>
+                                <div className="text-right">
+                                    <p className="text-lg font-bold text-gray-800">{item.score.toFixed(1)}</p>
+                                    <p className="text-[10px] text-gray-400">Score</p>
+                                </div>
+                            </div>
+                            
+                            <div className="grid grid-cols-3 gap-2 mt-4 pt-4 border-t border-gray-50">
+                                <div className="text-center">
+                                    <p className="text-xs font-bold text-green-600">{item.correct}</p>
+                                    <p className="text-[10px] text-gray-400">Correct</p>
+                                </div>
+                                <div className="text-center">
+                                    <p className="text-xs font-bold text-red-600">{item.wrong}</p>
+                                    <p className="text-[10px] text-gray-400">Wrong</p>
+                                </div>
+                                <div className="text-center">
+                                    <p className="text-xs font-bold text-gray-600">{item.timeTaken}</p>
+                                    <p className="text-[10px] text-gray-400">Time</p>
+                                </div>
+                            </div>
+                            
+                            <div className="mt-3 flex justify-between items-center text-[10px] text-gray-400">
+                                <span>{new Date(item.date).toLocaleDateString()}</span>
+                                <span>{new Date(item.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                            </div>
+                        </div>
+                    ))
+                )}
+            </div>
+        </div>
+    );
+};
+
 // --- MAIN APP COMPONENT ---
 
 const App = () => {
   const [activePage, setActivePage] = useState<PageState>(PageState.ONBOARDING);
   const [examResult, setExamResult] = useState<ExamResult | null>(null);
+  const [quizHistory, setQuizHistory] = useState<QuizHistoryItem[]>([]);
+
+  const addToQuizHistory = (item: Omit<QuizHistoryItem, 'id' | 'date'>) => {
+    const newItem: QuizHistoryItem = {
+      ...item,
+      id: Date.now().toString(),
+      date: Date.now()
+    };
+    setQuizHistory(prev => [newItem, ...prev]);
+  };
   
   // State for user preferences
   const [userPrefs, setUserPrefs] = useState<UserPrefs>({
@@ -2004,13 +2205,24 @@ const App = () => {
                 userProfile={userProfile}
                 onEditPrefs={() => setActivePage(PageState.ONBOARDING)} 
                 onUpdateProfile={setUserProfile}
+                onOpenHistory={() => setActivePage(PageState.QUIZ_HISTORY)}
             />
           );
       case PageState.TEST:
         return (
             <TestInterface 
-                onFinish={(result) => {
+                onFinish={(result, subject, topic) => {
                     setExamResult(result);
+                    addToQuizHistory({
+                        type: 'MOCK_TEST',
+                        subject,
+                        topic,
+                        score: result.score,
+                        totalQuestions: result.totalQuestions,
+                        correct: result.correct,
+                        wrong: result.wrong,
+                        timeTaken: result.timeTaken
+                    });
                     setActivePage(PageState.RESULT);
                 }} 
             />
@@ -2050,8 +2262,22 @@ const App = () => {
                 <PracticeQuizGenerator 
                     selectedClass={selectedClassForResource}
                     onBack={() => setActivePage(PageState.HOME)}
+                    onFinish={(score, subject, topic, timeTaken) => {
+                        addToQuizHistory({
+                            type: 'AI_QUIZ',
+                            subject,
+                            topic,
+                            score: score.correct, // For AI Quiz, score is just correct count
+                            totalQuestions: score.correct + score.wrong,
+                            correct: score.correct,
+                            wrong: score.wrong,
+                            timeTaken
+                        });
+                    }}
                 />
             );
+      case PageState.QUIZ_HISTORY:
+          return <QuizHistoryPage history={quizHistory} onBack={() => setActivePage(PageState.PROFILE)} />;
       case PageState.SAMPLE_PAPER:
           return (
              <SamplePaperList 

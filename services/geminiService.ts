@@ -2,16 +2,7 @@ import { GoogleGenAI } from "@google/genai";
 
 // Robustly retrieve API Key to prevent "process is not defined" errors in browser
 const getApiKey = () => {
-  try {
-    // Check if process and process.env exist before accessing
-    // This handles both Node-like environments and safely falls back in browser
-    if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
-      return process.env.API_KEY;
-    }
-  } catch (error) {
-    // Ignore reference errors
-  }
-  return '';
+  return process.env.GEMINI_API_KEY || '';
 };
 
 // Lazy initialization: We do not create the instance immediately at module load.
@@ -23,6 +14,7 @@ const getAI = () => {
   if (!aiInstance) {
     const key = getApiKey();
     // We allow a dummy key to prevent constructor crash, but calls will fail gracefully later
+    // This ensures the UI loads even if the key is missing
     aiInstance = new GoogleGenAI({ apiKey: key || 'DUMMY_KEY_FOR_INIT' });
   }
   return aiInstance;
@@ -46,7 +38,7 @@ export const explainQuestion = async (questionText: string, options: string[], c
     `;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3-flash-preview',
       contents: prompt,
     });
 
@@ -74,7 +66,7 @@ export const generateQuizQuestion = async (subject: string, topic: string): Prom
         Do not include markdown formatting like \`\`\`json. Just the raw JSON string.`;
 
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: 'gemini-3-flash-preview',
             contents: prompt,
             config: {
                 responseMimeType: 'application/json'
@@ -115,7 +107,7 @@ export const generatePracticeSet = async (classLevel: string, subject: string, t
         `;
 
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: 'gemini-3-flash-preview',
             contents: prompt,
             config: {
                 responseMimeType: 'application/json'
@@ -153,7 +145,7 @@ export const generateStudyNotes = async (classLevel: string, subject: string, to
         `;
 
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: 'gemini-3-flash-preview',
             contents: prompt,
         });
 
@@ -187,7 +179,7 @@ export const generateChapterSummary = async (classLevel: string, subject: string
         `;
 
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: 'gemini-3-flash-preview',
             contents: prompt,
             config: {
                 responseMimeType: 'application/json'

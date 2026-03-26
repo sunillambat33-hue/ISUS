@@ -46,5 +46,19 @@ export enum PageState {
   PROFILE = 'PROFILE',
   SAMPLE_PAPER = 'SAMPLE_PAPER',
   LEADERBOARD = 'LEADERBOARD',
-  BOOKMARKS = 'BOOKMARKS'
+  BOOKMARKS = 'BOOKMARKS',
+  QUIZ_HISTORY = 'QUIZ_HISTORY'
+}
+
+export interface QuizHistoryItem {
+  id: string;
+  type: 'AI_QUIZ' | 'MOCK_TEST';
+  subject: string;
+  topic: string;
+  score: number;
+  totalQuestions: number;
+  correct: number;
+  wrong: number;
+  date: number;
+  timeTaken: string;
 }
