@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, Bell, User, Zap } from 'lucide-react';
+import { Home, Bell, User, Zap, Timer } from 'lucide-react';
 import { PageState } from '../types';
 
 interface BottomNavProps {
@@ -10,6 +10,7 @@ interface BottomNavProps {
 const BottomNav: React.FC<BottomNavProps> = ({ activePage, onNavigate }) => {
   const navItems = [
     { id: PageState.HOME, label: 'Home', icon: Home },
+    { id: PageState.POMODORO, label: 'Timer', icon: Timer },
     { id: PageState.UPDATES, label: 'Updates', icon: Zap },
     { id: PageState.NOTIFICATION, label: 'Notification', icon: Bell },
     { id: PageState.PROFILE, label: 'Profile', icon: User },

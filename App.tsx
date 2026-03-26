@@ -4,6 +4,8 @@ import { CLASSES, SPECIAL_CLASSES, BOARDS, EXAMS, MOCK_QUESTIONS, RESOURCES, SYL
 import { Question, ExamResult, PageState, Reminder, QuizHistoryItem } from './types';
 import { explainQuestion, generateQuizQuestion, generateStudyNotes, generateChapterSummary, generatePracticeSet } from './services/geminiService';
 import BottomNav from './components/BottomNav';
+import { motion, AnimatePresence } from 'motion/react';
+import { cn } from './lib/utils';
 import { 
   ChevronLeft, 
   Menu, 
@@ -45,7 +47,11 @@ import {
   Info,
   GraduationCap,
   PlayCircle,
-  HelpCircle
+  HelpCircle,
+  Play,
+  Timer as TimerIcon,
+  Coffee,
+  RotateCcw
 } from 'lucide-react';
 
 // Types for User Preferences
@@ -407,6 +413,7 @@ const Onboarding = ({ initialPrefs, onSave }: { initialPrefs?: UserPrefs, onSave
 const Home = ({ 
     userPrefs, 
     userProfile,
+    dailyGoal,
     onStartTest, 
     onOpenPDF, 
     onOpenSyllabus, 
@@ -421,6 +428,7 @@ const Home = ({
 }: { 
     userPrefs: UserPrefs, 
     userProfile: UserProfileData,
+    dailyGoal: { completed: number, total: number },
     onStartTest: () => void, 
     onOpenPDF: () => void,
     onOpenSyllabus: (selectedClass: string) => void,
@@ -436,6 +444,8 @@ const Home = ({
   const [viewClass, setViewClass] = useState<string>(userPrefs.classes[0] || '12');
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [isRateUsOpen, setIsRateUsOpen] = useState(false);
+
+  const progressPercent = Math.round((dailyGoal.completed / dailyGoal.total) * 100);
 
   useEffect(() => {
     if (userPrefs.classes.length > 0 && !userPrefs.classes.includes(viewClass)) {
@@ -535,6 +545,46 @@ const Home = ({
                     <p className="text-xs text-gray-500">Study Materials PDF & MCQ's Tests</p>
                  </div>
                  <Search className="text-gray-400" />
+            </div>
+
+            {/* Daily Progress */}
+            <div className={`mb-6 p-4 rounded-2xl ${isDarkMode ? 'bg-gray-800' : 'bg-white'} shadow-sm border ${isDarkMode ? 'border-gray-700' : 'border-gray-100'}`}>
+                <div className="flex justify-between items-center mb-3">
+                    <h3 className={`text-sm font-bold ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>Daily Goal</h3>
+                    <span className="text-xs font-bold text-blue-500">{progressPercent}%</span>
+                </div>
+                <div className={`w-full h-2 ${isDarkMode ? 'bg-gray-700' : 'bg-gray-100'} rounded-full overflow-hidden`}>
+                    <div className="h-full bg-blue-500 rounded-full transition-all duration-1000" style={{ width: `${progressPercent}%` }}></div>
+                </div>
+                <div className="flex justify-between mt-2">
+                    <p className="text-[10px] text-gray-400">{dailyGoal.completed}/{dailyGoal.total} tasks completed</p>
+                    <p className="text-[10px] text-gray-400">{progressPercent >= 100 ? 'Goal Reached! 🎉' : 'Keep it up!'}</p>
+                </div>
+            </div>
+
+            {/* Quick Actions */}
+            <div className="flex gap-3 mb-6 overflow-x-auto pb-2 no-scrollbar">
+                <button 
+                    onClick={() => onNavigate(PageState.AI_QUIZ)}
+                    className={`flex-shrink-0 px-4 py-2 rounded-full text-xs font-bold flex items-center gap-2 transition-all active:scale-95 ${isDarkMode ? 'bg-gray-800 text-white border border-gray-700' : 'bg-white text-gray-800 shadow-sm border border-gray-100'}`}
+                >
+                    <Zap size={14} className="text-yellow-500" />
+                    Quick Quiz
+                </button>
+                <button 
+                    onClick={() => onNavigate(PageState.SYLLABUS)}
+                    className={`flex-shrink-0 px-4 py-2 rounded-full text-xs font-bold flex items-center gap-2 transition-all active:scale-95 ${isDarkMode ? 'bg-gray-800 text-white border border-gray-700' : 'bg-white text-gray-800 shadow-sm border border-gray-100'}`}
+                >
+                    <BookOpen size={14} className="text-blue-500" />
+                    Syllabus
+                </button>
+                <button 
+                    onClick={() => onNavigate(PageState.AI_NOTES)}
+                    className={`flex-shrink-0 px-4 py-2 rounded-full text-xs font-bold flex items-center gap-2 transition-all active:scale-95 ${isDarkMode ? 'bg-gray-800 text-white border border-gray-700' : 'bg-white text-gray-800 shadow-sm border border-gray-100'}`}
+                >
+                    <Sparkles size={14} className="text-purple-500" />
+                    AI Notes
+                </button>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -2064,10 +2114,142 @@ const QuizHistoryPage = ({ history, onBack }: { history: QuizHistoryItem[], onBa
 
 // --- MAIN APP COMPONENT ---
 
+// --- POMODORO TIMER COMPONENT ---
+const PomodoroTimer = ({ isDarkMode }: { isDarkMode: boolean }) => {
+    const [timeLeft, setTimeLeft] = useState(25 * 60);
+    const [isActive, setIsActive] = useState(false);
+    const [mode, setMode] = useState<'WORK' | 'BREAK'>('WORK');
+    const [sessions, setSessions] = useState(0);
+
+    useEffect(() => {
+        let interval: any = null;
+        if (isActive && timeLeft > 0) {
+            interval = setInterval(() => {
+                setTimeLeft((prev) => prev - 1);
+            }, 1000);
+        } else if (timeLeft === 0) {
+            setIsActive(false);
+            if (mode === 'WORK') {
+                setMode('BREAK');
+                setTimeLeft(5 * 60);
+                setSessions(s => s + 1);
+            } else {
+                setMode('WORK');
+                setTimeLeft(25 * 60);
+            }
+            // Simple vibration if supported
+            if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+        }
+        return () => clearInterval(interval);
+    }, [isActive, timeLeft, mode]);
+
+    const toggleTimer = () => setIsActive(!isActive);
+    
+    const resetTimer = () => {
+        setIsActive(false);
+        setMode('WORK');
+        setTimeLeft(25 * 60);
+    };
+
+    const formatTime = (seconds: number) => {
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    };
+
+    const progress = mode === 'WORK' 
+        ? ((25 * 60 - timeLeft) / (25 * 60)) * 100 
+        : ((5 * 60 - timeLeft) / (5 * 60)) * 100;
+
+    return (
+        <div className={`p-6 flex flex-col items-center justify-center min-h-[80vh] ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
+            <div className="text-center mb-8">
+                <h2 className="text-3xl font-bold mb-2">Study Timer</h2>
+                <p className={`text-sm ${isDarkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                    Stay focused and productive
+                </p>
+            </div>
+
+            <div className="relative w-64 h-64 flex items-center justify-center mb-12">
+                {/* Progress Circle */}
+                <svg className="absolute inset-0 w-full h-full -rotate-90">
+                    <circle
+                        cx="128"
+                        cy="128"
+                        r="120"
+                        stroke="currentColor"
+                        strokeWidth="8"
+                        fill="transparent"
+                        className={`${isDarkMode ? 'text-gray-800' : 'text-gray-100'}`}
+                    />
+                    <circle
+                        cx="128"
+                        cy="128"
+                        r="120"
+                        stroke={mode === 'WORK' ? '#3b82f6' : '#10b981'}
+                        strokeWidth="8"
+                        fill="transparent"
+                        strokeDasharray={2 * Math.PI * 120}
+                        strokeDashoffset={2 * Math.PI * 120 * (1 - progress / 100)}
+                        strokeLinecap="round"
+                        className="transition-all duration-1000"
+                    />
+                </svg>
+
+                <div className="text-center z-10">
+                    <div className="flex items-center justify-center gap-2 mb-1">
+                        {mode === 'WORK' ? <Zap size={20} className="text-blue-500" /> : <Coffee size={20} className="text-green-500" />}
+                        <span className="text-sm font-bold tracking-widest uppercase">
+                            {mode}
+                        </span>
+                    </div>
+                    <div className="text-6xl font-black font-mono tracking-tighter">
+                        {formatTime(timeLeft)}
+                    </div>
+                </div>
+            </div>
+
+            <div className="flex gap-4 mb-12">
+                <button 
+                    onClick={toggleTimer}
+                    className={`w-16 h-16 rounded-full flex items-center justify-center shadow-lg transition-transform active:scale-95 ${
+                        isActive 
+                        ? 'bg-orange-500 text-white' 
+                        : 'bg-blue-600 text-white'
+                    }`}
+                >
+                    {isActive ? <Pause size={32} /> : <Play size={32} className="ml-1" />}
+                </button>
+                <button 
+                    onClick={resetTimer}
+                    className={`w-16 h-16 rounded-full flex items-center justify-center shadow-lg transition-transform active:scale-95 ${
+                        isDarkMode ? 'bg-gray-800 text-gray-400' : 'bg-gray-100 text-gray-600'
+                    }`}
+                >
+                    <RotateCcw size={28} />
+                </button>
+            </div>
+
+            <div className={`grid grid-cols-2 gap-4 w-full max-w-xs`}>
+                <div className={`p-4 rounded-2xl text-center ${isDarkMode ? 'bg-gray-800' : 'bg-blue-50'}`}>
+                    <p className={`text-[10px] font-bold uppercase tracking-wider mb-1 ${isDarkMode ? 'text-gray-500' : 'text-blue-400'}`}>Sessions</p>
+                    <p className="text-2xl font-black">{sessions}</p>
+                </div>
+                <div className={`p-4 rounded-2xl text-center ${isDarkMode ? 'bg-gray-800' : 'bg-green-50'}`}>
+                    <p className={`text-[10px] font-bold uppercase tracking-wider mb-1 ${isDarkMode ? 'text-gray-500' : 'text-green-400'}`}>Focus Time</p>
+                    <p className="text-2xl font-black">{sessions * 25}m</p>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 const App = () => {
   const [activePage, setActivePage] = useState<PageState>(PageState.ONBOARDING);
   const [examResult, setExamResult] = useState<ExamResult | null>(null);
   const [quizHistory, setQuizHistory] = useState<QuizHistoryItem[]>([]);
+
+  const [dailyGoal, setDailyGoal] = useState({ completed: 3, total: 4 });
 
   const addToQuizHistory = (item: Omit<QuizHistoryItem, 'id' | 'date'>) => {
     const newItem: QuizHistoryItem = {
@@ -2076,6 +2258,12 @@ const App = () => {
       date: Date.now()
     };
     setQuizHistory(prev => [newItem, ...prev]);
+    
+    // Increment daily goal
+    setDailyGoal(prev => ({
+        ...prev,
+        completed: Math.min(prev.total, prev.completed + 1)
+    }));
   };
   
   // State for user preferences
@@ -2165,6 +2353,7 @@ const App = () => {
             <Home 
                 userPrefs={userPrefs}
                 userProfile={userProfile}
+                dailyGoal={dailyGoal}
                 onStartTest={() => setActivePage(PageState.TEST)} 
                 onOpenPDF={() => setActivePage(PageState.PDF)}
                 onOpenSyllabus={(cls) => {
@@ -2198,6 +2387,8 @@ const App = () => {
           return <UpdatesPage />;
       case PageState.NOTIFICATION:
           return <NotificationsPage reminders={reminders} />;
+      case PageState.POMODORO:
+          return <PomodoroTimer isDarkMode={isDarkMode} />;
       case PageState.PROFILE:
           return (
             <ProfilePage 
@@ -2295,12 +2486,23 @@ const App = () => {
   };
   
   // Pages that show the bottom nav
-  const showBottomNav = [PageState.HOME, PageState.UPDATES, PageState.NOTIFICATION, PageState.PROFILE].includes(activePage);
+  const showBottomNav = [PageState.HOME, PageState.UPDATES, PageState.NOTIFICATION, PageState.PROFILE, PageState.POMODORO].includes(activePage);
 
   return (
     <div className={`font-sans ${isDarkMode ? 'bg-gray-950' : 'bg-gray-100'} min-h-screen flex justify-center`}>
-        <div className={`w-full max-w-md ${isDarkMode ? 'bg-gray-900' : 'bg-white'} min-h-screen shadow-xl overflow-hidden relative`}>
-            {renderContent()}
+        <div className={`w-full max-w-md ${isDarkMode ? 'bg-gray-900' : 'bg-white'} min-h-screen shadow-xl overflow-hidden relative flex flex-col`}>
+            <AnimatePresence mode="wait">
+                <motion.div
+                    key={activePage}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    transition={{ duration: 0.2 }}
+                    className="flex-1 overflow-auto no-scrollbar"
+                >
+                    {renderContent()}
+                </motion.div>
+            </AnimatePresence>
             
             {showBottomNav && (
                 <BottomNav activePage={activePage} onNavigate={setActivePage} />

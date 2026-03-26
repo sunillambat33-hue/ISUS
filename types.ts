@@ -47,7 +47,8 @@ export enum PageState {
   SAMPLE_PAPER = 'SAMPLE_PAPER',
   LEADERBOARD = 'LEADERBOARD',
   BOOKMARKS = 'BOOKMARKS',
-  QUIZ_HISTORY = 'QUIZ_HISTORY'
+  QUIZ_HISTORY = 'QUIZ_HISTORY',
+  POMODORO = 'POMODORO'
 }
 
 export interface QuizHistoryItem {
